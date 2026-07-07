@@ -17,8 +17,9 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 oauthlib==3.2.2
 requests-oauthlib==1.3.1
+email-validator==2.1.1  # ✅ ADD THIS
 
-# AI & Agents - Let pip resolve versions automatically
+# AI & Agents - No version pins
 langchain
 langchain-groq
 langgraph
