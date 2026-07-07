@@ -2,10 +2,9 @@ services:
   - type: web
     name: migrateai
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-    # ✅ Add Python version here
-    pythonVersion: 3.11
+    pythonVersion: 3.11    # ✅ Correct indentation
     envVars:
       - key: DATABASE_URL
         fromDatabase:
