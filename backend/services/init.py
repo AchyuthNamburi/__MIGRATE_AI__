@@ -1,0 +1,6 @@
+# backend/services/__init__.py
+"""Services package"""
+
+from backend.services.auth_service import AuthService
+
+__all__ = ["AuthService"]

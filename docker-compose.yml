@@ -1,0 +1,77 @@
+# docker-compose.yml (Updated - No frontend container)
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: migration_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: migration_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - migration_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: migration_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - migration_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: migration_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/migration_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend  # Mount frontend for templates
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - migration_network
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: migration_worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/migration_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app/backend
+      - ./agents:/app/agents
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - migration_network
+    command: celery -A backend.workers.celery_app worker --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  migration_network:
+    driver: bridge
