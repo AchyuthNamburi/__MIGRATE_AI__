@@ -1,0 +1,185 @@
+{
+  "django": {
+    "name": "Django",
+    "from_version": "3.2",
+    "to_version": "4.2",
+    "detection": {
+      "file": "manage.py",
+      "framework": "Django"
+    },
+    "patterns": [
+      {
+        "old": "url(",
+        "new": "path(",
+        "file_types": [".py"],
+        "description": "Replace deprecated url() with path()"
+      },
+      {
+        "old": "MIDDLEWARE_CLASSES",
+        "new": "MIDDLEWARE",
+        "file_types": [".py"],
+        "description": "Replace MIDDLEWARE_CLASSES with MIDDLEWARE"
+      },
+      {
+        "old": "django.conf.urls.url",
+        "new": "django.urls.path",
+        "file_types": [".py"],
+        "description": "Update url import to path"
+      },
+      {
+        "old": "DEFAULT_CONTENT_TYPE",
+        "new": "REMOVED",
+        "file_types": [".py"],
+        "description": "Remove DEFAULT_CONTENT_TYPE (removed in Django 4.0)"
+      }
+    ],
+    "dependencies": [
+      {
+        "old": "Django==3.2",
+        "new": "Django==4.2"
+      }
+    ]
+  },
+  "react": {
+    "name": "React",
+    "from_version": "17",
+    "to_version": "18",
+    "detection": {
+      "file": "package.json",
+      "framework": "React"
+    },
+    "patterns": [
+      {
+        "old": "ReactDOM.render(",
+        "new": "root.render(",
+        "file_types": [".js", ".jsx"],
+        "description": "Replace ReactDOM.render with createRoot"
+      },
+      {
+        "old": "componentWillMount",
+        "new": "UNSAFE_componentWillMount",
+        "file_types": [".js", ".jsx"],
+        "description": "Mark componentWillMount as UNSAFE"
+      },
+      {
+        "old": "componentWillReceiveProps",
+        "new": "UNSAFE_componentWillReceiveProps",
+        "file_types": [".js", ".jsx"],
+        "description": "Mark componentWillReceiveProps as UNSAFE"
+      },
+      {
+        "old": "componentWillUpdate",
+        "new": "UNSAFE_componentWillUpdate",
+        "file_types": [".js", ".jsx"],
+        "description": "Mark componentWillUpdate as UNSAFE"
+      }
+    ],
+    "dependencies": [
+      {
+        "old": "react@17",
+        "new": "react@18"
+      },
+      {
+        "old": "react-dom@17",
+        "new": "react-dom@18"
+      }
+    ]
+  },
+  "fastapi": {
+    "name": "FastAPI",
+    "from_version": "0.68",
+    "to_version": "0.109",
+    "detection": {
+      "file": "requirements.txt",
+      "framework": "FastAPI"
+    },
+    "patterns": [
+      {
+        "old": "from pydantic import",
+        "new": "from pydantic.v1 import",
+        "file_types": [".py"],
+        "description": "Update Pydantic imports to v1 compatibility"
+      },
+      {
+        "old": "@validator",
+        "new": "@field_validator",
+        "file_types": [".py"],
+        "description": "Replace validator with field_validator"
+      }
+    ],
+    "dependencies": [
+      {
+        "old": "fastapi==0.68",
+        "new": "fastapi==0.109"
+      },
+      {
+        "old": "pydantic==1.8",
+        "new": "pydantic==2.5"
+      }
+    ]
+  },
+  "pandas": {
+    "name": "Pandas",
+    "from_version": "1.x",
+    "to_version": "2.x",
+    "detection": {
+      "file": "requirements.txt",
+      "framework": "Pandas"
+    },
+    "patterns": [
+      {
+        "old": ".append(",
+        "new": "pd.concat(",
+        "file_types": [".py"],
+        "description": "Replace .append() with pd.concat()"
+      },
+      {
+        "old": ".ix",
+        "new": ".iloc or .loc",
+        "file_types": [".py"],
+        "description": "Replace .ix with .iloc or .loc"
+      },
+      {
+        "old": ".iteritems()",
+        "new": ".items()",
+        "file_types": [".py"],
+        "description": "Replace .iteritems() with .items()"
+      }
+    ],
+    "dependencies": [
+      {
+        "old": "pandas==1.",
+        "new": "pandas==2."
+      }
+    ]
+  },
+  "flask": {
+    "name": "Flask",
+    "from_version": "2.0",
+    "to_version": "3.0",
+    "detection": {
+      "file": "requirements.txt",
+      "framework": "Flask"
+    },
+    "patterns": [
+      {
+        "old": "app.before_first_request",
+        "new": "app.before_request",
+        "file_types": [".py"],
+        "description": "Replace before_first_request with before_request"
+      },
+      {
+        "old": "flask._app_ctx_stack",
+        "new": "flask.app_context",
+        "file_types": [".py"],
+        "description": "Update app context import"
+      }
+    ],
+    "dependencies": [
+      {
+        "old": "flask==2.0",
+        "new": "flask==3.0"
+      }
+    ]
+  }
+}

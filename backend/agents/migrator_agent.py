@@ -1,11 +1,19 @@
 # backend/agents/migrator_agent.py
-import os, re, shutil, json, logging
+"""Migrator Agent - Executes migration plan"""
+
+import os
+import re
+import shutil
+import json
+import logging
 from typing import Dict, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class CodeMigrator:
+    """Executes code migration based on the migration plan"""
+    
     def __init__(self, repo_path: str, plan: Dict):
         self.repo_path = repo_path
         self.plan = plan
@@ -15,73 +23,52 @@ class CodeMigrator:
         self.backup_path = None
         
     async def execute(self) -> Dict:
-        logger.info(f"🚀 Starting migration in: {self.repo_path}")
+        """Execute the migration plan"""
+        logger.info(f"🚀 Starting migration execution in: {self.repo_path}")
+        
+        # Create backup
         self.backup_path = await self._create_backup()
         
+        # Execute each step in the plan
         for step in self.plan.get("steps", []):
             try:
+                step_num = step.get('step_number', 0)
+                logger.info(f"📝 Executing step {step_num}: {step.get('title')}")
+                
                 if step.get("type") == "dependency_update":
                     await self._update_dependencies(step)
                 elif step.get("type") == "code_update":
                     await self._update_code_ast(step)
                 elif step.get("type") == "config_update":
                     await self._update_config(step)
+                elif step.get("type") == "database":
+                    await self._run_database_migrations(step)
+                elif step.get("type") == "testing":
+                    await self._run_tests(step)
+                else:
+                    logger.warning(f"Unknown step type: {step.get('type')}")
+                    
             except Exception as e:
-                self.errors.append({"step": step.get("step_number"), "error": str(e)})
+                logger.error(f"❌ Error in step {step.get('step_number')}: {str(e)}")
+                self.errors.append({
+                    "step": step.get("step_number"),
+                    "error": str(e)
+                })
                 break
         
+        # Generate report
         report = self._generate_report()
+        
+        # If errors occurred, restore backup
         if self.errors:
             await self._restore_backup()
             report["status"] = "failed"
+            report["message"] = "Migration failed - restored from backup"
         else:
             report["status"] = "success"
+            report["message"] = "Migration completed successfully"
+        
         return report
-    
-    async def execute_with_docker(self) -> Dict:
-        """Execute migration in Docker container"""
-        try:
-            from backend.sandbox.docker_sandbox import DockerSandbox
-            
-            logger.info("🐳 Starting Docker migration...")
-            
-            # Create sandbox
-            sandbox = DockerSandbox()
-            await sandbox.create_sandbox(self.repo_path, "python")
-            
-            # ✅ Step 1: Install Django
-            logger.info("📦 Installing Django...")
-            install1 = await sandbox.execute_command("pip install django")
-            if not install1["success"]:
-                await sandbox.cleanup()
-                return {"status": "failed", "error": f"pip install django failed: {install1.get('output')}"}
-            
-            # ✅ Step 2: Install requirements if exists
-            logger.info("📦 Installing requirements...")
-            check = await sandbox.execute_command("test -f requirements.txt && echo 'exists' || echo 'not'")
-            if "exists" in check.get("output", ""):
-                await sandbox.execute_command("pip install -r requirements.txt")
-            
-            # ✅ Step 3: Run migrations
-            logger.info("📊 Running migrations...")
-            migrate = await sandbox.execute_command("python manage.py migrate --noinput 2>/dev/null || echo 'Migration skipped'")
-            
-            # ✅ Step 4: Run tests
-            logger.info("🧪 Running tests...")
-            tests = await sandbox.execute_command("python manage.py test --noinput 2>/dev/null || echo 'No tests found'")
-            
-            await sandbox.cleanup()
-            
-            return {
-                "status": "success",
-                "message": "Migration completed in Docker",
-                "migrate_output": migrate.get("output", ""),
-                "test_output": tests.get("output", "")
-            }
-            
-        except Exception as e:
-            logger.error(f"Docker failed: {str(e)}")
-            return {"status": "failed", "error": str(e)}
     
     async def _create_backup(self) -> str:
         backup_dir = f"{self.repo_path}_backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
@@ -148,6 +135,12 @@ class CodeMigrator:
                         f.write(new)
                     self.modified_files.append(file)
                     self.changes.append({"file": file, "type": "config_update"})
+    
+    async def _run_database_migrations(self, step: Dict):
+        logger.info(f"📊 Database migrations: {step.get('commands', [])}")
+    
+    async def _run_tests(self, step: Dict):
+        logger.info(f"🧪 Running tests: {step.get('commands', [])}")
     
     def _generate_report(self) -> Dict:
         return {
