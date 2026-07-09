@@ -1,480 +1,435 @@
-// frontend/static/js/dashboard.js
+// ============================================================
+// COMPLETE DASHBOARD.JS - All Functions
+// ============================================================
 
-// ✅ Register the Alpine.js component
-document.addEventListener('alpine:init', () => {
-    console.log('✅ Alpine.js initializing...');
-    
-    Alpine.data('migrationApp', () => ({
-        // ===== State =====
-        sidebarCollapsed: false,
-        currentView: 'dashboard',
-        user: {
-            name: 'Loading...',
-            email: 'Loading...',
-            avatar: '',
-            full_name: ''
-        },
-        metrics: {
-            total_migrations: 0,
-            success_rate: 0,
-            active_jobs: 0,
-            avg_time: 0,
-            migration_growth: 0
-        },
-        recent_migrations: [],
-        repositories: [],
-        selected_repo: '',
-        isMigrating: false,
-        progress: 0,
-        current_step: -1,
-        status_message: 'Ready to start',
-        logs: [],
-        history_filter: '',
-        history_status_filter: '',
-        migration_history: [],
-        settings: {
-            notifications: true,
-            auto_repair: true
-        },
-        showImportModal: false,
-        import_url: '',
-        import_branch: 'main',
-        migration_options: {
-            auto_repair: true,
-            generate_report: true,
-            create_pr: false
-        },
-        migration_job_id: null,
-        ws: null,
-        
-        // ===== Initialize =====
-        async init() {
-            console.log('🚀 Dashboard initializing...');
-            await this.loadUserData();
-            await this.fetchDashboard();
-            await this.fetchRepositories();
-            await this.fetchHistory();
-            this.connectWebSocket();
-            this.setupAutoRefresh();
-        },
-        
-        // ===== Load User Data =====
-        async loadUserData() {
-            try {
-                const token = localStorage.getItem('access_token');
-                if (!token) {
-                    window.location.href = '/login';
-                    return;
-                }
-                
-                const response = await fetch('/api/auth/me', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        localStorage.removeItem('access_token');
-                        localStorage.removeItem('refresh_token');
-                        window.location.href = '/login';
-                        return;
-                    }
-                    throw new Error('Failed to load user data');
-                }
-                
-                const userData = await response.json();
-                this.user = {
-                    name: userData.full_name || userData.username || 'User',
-                    email: userData.email || '',
-                    full_name: userData.full_name || '',
-                    avatar: userData.avatar_url || ''
-                };
-                
-                console.log('✅ User data loaded:', this.user);
-            } catch (error) {
-                console.error('❌ Error loading user data:', error);
-                this.user.name = 'Error';
-                this.user.email = 'Please re-login';
-            }
-        },
-        
-        // ===== API Calls =====
-        async fetchDashboard() {
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/dashboard', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (!response.ok) throw new Error('Failed to fetch dashboard');
-                
-                const data = await response.json();
-                this.metrics = data.metrics || this.metrics;
-                this.recent_migrations = data.recent_migrations || [];
-                this.renderCharts();
-            } catch (error) {
-                console.error('Failed to fetch dashboard:', error);
-                // Mock data for demo
-                this.metrics = {
-                    total_migrations: 12,
-                    success_rate: 92,
-                    active_jobs: 0,
-                    avg_time: 3.5,
-                    migration_growth: 15
-                };
-                this.recent_migrations = [
-                    { id: 1, repository: 'my-django-app', framework: 'Django', from_version: '3.2', to_version: '4.2', status: 'completed', duration: 45 },
-                    { id: 2, repository: 'react-dashboard', framework: 'React', from_version: '17', to_version: '18', status: 'completed', duration: 32 },
-                    { id: 3, repository: 'fastapi-backend', framework: 'FastAPI', from_version: '0.68', to_version: '0.100', status: 'failed', duration: 18 }
-                ];
-            }
-        },
-        
-        async fetchRepositories() {
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/repositories', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (!response.ok) throw new Error('Failed to fetch repositories');
-                
-                this.repositories = await response.json();
-            } catch (error) {
-                console.error('Failed to fetch repositories:', error);
-                // Mock data for demo
-                this.repositories = [
-                    { id: 1, name: 'my-django-app', language: 'Python', framework: 'Django', file_count: 120, status: 'Ready' },
-                    { id: 2, name: 'react-dashboard', language: 'JavaScript', framework: 'React', file_count: 85, status: 'Ready' },
-                    { id: 3, name: 'fastapi-backend', language: 'Python', framework: 'FastAPI', file_count: 45, status: 'Ready' }
-                ];
-            }
-        },
-        
-        async fetchHistory() {
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/migrations/history', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (!response.ok) throw new Error('Failed to fetch history');
-                
-                this.migration_history = await response.json();
-            } catch (error) {
-                console.error('Failed to fetch history:', error);
-                // Mock data for demo
-                this.migration_history = [
-                    { id: 1, repository: 'my-django-app', framework: 'Django', status: 'completed', date: '2026-07-07', duration: 45 },
-                    { id: 2, repository: 'react-dashboard', framework: 'React', status: 'completed', date: '2026-07-06', duration: 32 },
-                    { id: 3, repository: 'fastapi-backend', framework: 'FastAPI', status: 'failed', date: '2026-07-05', duration: 18 }
-                ];
-            }
-        },
-        
-        // ===== WebSocket Connection =====
-        connectWebSocket() {
-            try {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/ws`;
-                
-                this.ws = new WebSocket(wsUrl);
-                
-                this.ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    this.handleWebSocketMessage(data);
-                };
-                
-                this.ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                };
-                
-                this.ws.onopen = () => {
-                    console.log('✅ WebSocket connected');
-                };
-            } catch (error) {
-                console.warn('⚠️ WebSocket not available:', error);
-            }
-        },
-        
-        handleWebSocketMessage(data) {
-            switch(data.type) {
-                case 'progress':
-                    this.progress = data.progress || 0;
-                    this.status_message = data.status || 'Processing...';
-                    this.current_step = data.step || 0;
-                    break;
-                case 'log':
-                    this.logs.push({
-                        timestamp: data.timestamp || new Date().toLocaleTimeString(),
-                        level: data.level || 'info',
-                        message: data.message || ''
-                    });
-                    this.scrollLogsToBottom();
-                    break;
-                case 'complete':
-                    this.isMigrating = false;
-                    this.status_message = '✅ Migration completed successfully!';
-                    this.fetchDashboard();
-                    this.fetchHistory();
-                    break;
-                case 'error':
-                    this.isMigrating = false;
-                    this.status_message = '❌ Migration failed: ' + (data.message || 'Unknown error');
-                    break;
-            }
-        },
-        
-        // ===== Migration Actions =====
-        async startMigration() {
-            if (!this.selected_repo || this.isMigrating) return;
-            
-            this.isMigrating = true;
-            this.progress = 0;
-            this.current_step = -1;
-            this.status_message = '🚀 Starting migration...';
-            this.logs = [];
-            
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/migrations', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        repository_id: this.selected_repo,
-                        options: this.migration_options
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to start migration');
-                
-                const data = await response.json();
-                this.migration_job_id = data.id;
-                
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify({
-                        type: 'subscribe',
-                        job_id: data.id
-                    }));
-                }
-                
-            } catch (error) {
-                console.error('Failed to start migration:', error);
-                this.isMigrating = false;
-                this.status_message = '❌ Failed to start migration: ' + error.message;
-            }
-        },
-        
-        async rerunMigration(jobId) {
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch(`/api/migrations/${jobId}/rerun`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (!response.ok) throw new Error('Failed to rerun migration');
-                
-                this.showNotification('🔄 Migration re-run started', 'success');
-                this.fetchHistory();
-            } catch (error) {
-                console.error('Failed to rerun migration:', error);
-                this.showNotification('❌ Failed to rerun migration', 'error');
-            }
-        },
-        
-        async viewReport(jobId) {
-            window.open(`/api/reports/${jobId}`, '_blank');
-        },
-        
-        async deleteMigration(jobId) {
-            if (!confirm('Are you sure you want to delete this migration?')) return;
-            
-            try {
-                const token = localStorage.getItem('access_token');
-                await fetch(`/api/migrations/${jobId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                this.fetchHistory();
-                this.showNotification('🗑️ Migration deleted', 'success');
-            } catch (error) {
-                console.error('Failed to delete migration:', error);
-                this.showNotification('❌ Failed to delete migration', 'error');
-            }
-        },
-        
-        // ===== Repository Actions =====
-        async importRepository() {
-            if (!this.import_url) {
-                this.showNotification('Please enter a repository URL', 'error');
+// ===== STATE =====
+let currentUser = {};
+let repositories = [];
+let migrationHistory = [];
+let currentJobId = null;
+let pollInterval = null;
+
+// ===== API HELPERS =====
+function getToken() { 
+    return localStorage.getItem('access_token'); 
+}
+
+function getHeaders() {
+    return {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+    };
+}
+
+// ===== TOAST NOTIFICATION =====
+function showToast(title, message, duration = 3000) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    document.getElementById('toastTitle').textContent = title;
+    document.getElementById('toastMessage').textContent = message;
+    toast.classList.add('show');
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => toast.classList.remove('show'), duration);
+}
+
+// ===== SWITCH VIEW =====
+function switchView(view) {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    const section = document.getElementById(`section-${view}`);
+    if (section) section.classList.add('active');
+    document.querySelectorAll('nav a').forEach(el => el.classList.remove('active'));
+    const navLink = document.querySelector(`nav a[data-view="${view}"]`);
+    if (navLink) navLink.classList.add('active');
+    if (view === 'repositories') loadRepositories();
+    if (view === 'history') loadHistory();
+    if (view === 'migrate') populateRepoSelect();
+}
+
+// ===== LOAD USER =====
+async function loadUser() {
+    try {
+        const response = await fetch('/api/auth/me', { headers: getHeaders() });
+        if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                window.location.href = '/login';
                 return;
             }
-            
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/repositories/import', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        url: this.import_url,
-                        branch: this.import_branch
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to import repository');
-                
-                const data = await response.json();
-                this.showImportModal = false;
-                this.import_url = '';
-                this.import_branch = 'main';
-                await this.fetchRepositories();
-                this.showNotification('✅ Repository imported successfully!', 'success');
-            } catch (error) {
-                console.error('Failed to import repository:', error);
-                this.showNotification('❌ Failed to import repository: ' + error.message, 'error');
-            }
-        },
-        
-        // ===== Settings Actions =====
-        async updateProfile() {
-            try {
-                const token = localStorage.getItem('access_token');
-                const response = await fetch('/api/user/profile', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        full_name: this.user.full_name
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to update profile');
-                
-                const data = await response.json();
-                this.user.name = data.full_name || this.user.name;
-                this.user.full_name = data.full_name || '';
-                this.showNotification('✅ Profile updated successfully!', 'success');
-            } catch (error) {
-                console.error('Failed to update profile:', error);
-                this.showNotification('❌ Failed to update profile', 'error');
-            }
-        },
-        
-        connectGitHub() {
-            window.location.href = '/api/auth/github/login';
-        },
-        
-        // ===== UI Helpers =====
-        openImportModal() {
-            this.showImportModal = true;
-        },
-        
-        scrollLogsToBottom() {
-            setTimeout(() => {
-                const container = this.$refs.logContainer;
-                if (container) {
-                    container.scrollTop = container.scrollHeight;
-                }
-            }, 100);
-        },
-        
-        showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `notification notification-${type}`;
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 12px 20px;
-                border-radius: 8px;
-                background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
-                color: white;
-                font-weight: 500;
-                z-index: 10000;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-                animation: slideIn 0.3s ease;
-            `;
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transition = 'opacity 0.3s ease';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
-        },
-        
-        setupAutoRefresh() {
-            setInterval(() => {
-                if (this.currentView === 'dashboard') {
-                    this.fetchDashboard();
-                }
-                if (this.currentView === 'history') {
-                    this.fetchHistory();
-                }
-            }, 30000);
-        },
-        
-        viewRepoDetails(repoId) {
-            console.log('Viewing repository:', repoId);
-            this.showNotification('📂 Repository details coming soon!', 'info');
-        },
-        
-        // ===== Computed =====
-        get filtered_history() {
-            let items = this.migration_history;
-            
-            if (this.history_filter) {
-                const filter = this.history_filter.toLowerCase();
-                items = items.filter(item => 
-                    item.repository && item.repository.toLowerCase().includes(filter)
-                );
-            }
-            
-            if (this.history_status_filter) {
-                items = items.filter(item => 
-                    item.status === this.history_status_filter
-                );
-            }
-            
-            return items;
-        },
-        
-        // ===== Charts =====
-        renderCharts() {
-            console.log('📊 Rendering charts...');
-        },
-        
-        // ===== Logout =====
-        logout() {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
+            throw new Error('Failed to load user');
         }
-    }));
+        const user = await response.json();
+        currentUser = user;
+        const name = user.full_name || user.username || 'User';
+        document.getElementById('userName').textContent = name;
+        document.getElementById('userEmail').textContent = user.email || '';
+        document.getElementById('welcomeName').textContent = name;
+        document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
+    } catch (e) {
+        console.error('Error loading user:', e);
+        showToast('Error', 'Failed to load user data');
+    }
+}
+
+// ===== LOAD DASHBOARD =====
+async function loadDashboard() {
+    try {
+        const response = await fetch('/api/repositories/', { headers: getHeaders() });
+        if (response.ok) {
+            const repos = await response.json();
+            document.getElementById('repoCount').textContent = repos.length || 0;
+        }
+        
+        const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+        document.getElementById('migrationCount').textContent = history.length || 0;
+        
+        const completed = history.filter(h => h.status === 'success').length;
+        const rate = history.length > 0 ? Math.round((completed / history.length) * 100) : 0;
+        document.getElementById('successRate').textContent = rate + '%';
+        
+        const active = history.filter(h => h.status === 'running').length;
+        document.getElementById('activeJobs').textContent = active;
+        document.getElementById('activeStatus').textContent = active > 0 ? '🔄 Running...' : '✅ Idle';
+        
+    } catch (e) {
+        console.error('Error loading dashboard:', e);
+    }
+}
+
+// ===== LOAD REPOSITORIES =====
+async function loadRepositories() {
+    try {
+        const response = await fetch('/api/repositories/', { headers: getHeaders() });
+        if (!response.ok) throw new Error('Failed to load repositories');
+        repositories = await response.json();
+        document.getElementById('repoCount').textContent = repositories.length;
+        document.getElementById('repoCountBadge').textContent = repositories.length;
+        renderRepositories();
+        populateRepoSelect();
+    } catch (e) {
+        console.error('Error loading repositories:', e);
+        document.getElementById('repoList').innerHTML = `
+            <p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:40px;">
+                <i class="fas fa-exclamation-circle" style="font-size:32px;display:block;margin-bottom:12px;"></i>
+                Failed to load repositories
+            </p>
+        `;
+        showToast('Error', 'Failed to load repositories');
+    }
+}
+
+// ===== RENDER REPOSITORIES =====
+function renderRepositories() {
+    const container = document.getElementById('repoList');
+    if (!container) return;
+    if (!repositories || repositories.length === 0) {
+        container.innerHTML = `
+            <p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:40px;">
+                <i class="fas fa-inbox" style="font-size:32px;display:block;margin-bottom:12px;"></i>
+                No repositories imported yet.
+            </p>
+        `;
+        return;
+    }
+    container.innerHTML = repositories.map(r => `
+        <div class="repo-card">
+            <div class="repo-header">
+                <i class="fas fa-github"></i>
+                <span class="repo-name">${r.name || 'Unknown'}</span>
+                <span class="repo-status ready">${r.status || 'Ready'}</span>
+            </div>
+            <div class="repo-details">
+                <span><i class="fas fa-code"></i> ${r.framework || 'Unknown'}</span>
+                <span><i class="fas fa-file-alt"></i> ${r.file_count || 0} files</span>
+            </div>
+            <div class="repo-actions">
+                <button class="btn-migrate" onclick="runFullMigration('${r.id}')"><i class="fas fa-play"></i> Migrate</button>
+                <button class="btn-analyze" onclick="runAnalyze('${r.id}')"><i class="fas fa-search"></i></button>
+                <button class="btn-analyze" onclick="runReport('${r.id}')"><i class="fas fa-file-alt"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ===== POPULATE REPO SELECT =====
+function populateRepoSelect() {
+    const select = document.getElementById('migrateRepoSelect');
+    if (!select) return;
+    select.innerHTML = '<option value="">Choose a repository...</option>';
+    repositories.forEach(r => {
+        select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
+    });
+}
+
+// ===== OPEN/CLOSE IMPORT MODAL =====
+function openImportModal() {
+    document.getElementById('importModal').style.display = 'flex';
+}
+
+function closeImportModal() {
+    document.getElementById('importModal').style.display = 'none';
+}
+
+// ===== IMPORT REPOSITORY =====
+async function importRepository() {
+    const url = document.getElementById('importUrl').value.trim();
+    const branch = document.getElementById('importBranch').value.trim() || 'main';
+    if (!url) { showToast('Error', 'Please enter a GitHub URL'); return; }
     
-    console.log('✅ migrationApp registered with Alpine.js!');
+    const btn = event.target;
+    btn.textContent = 'Importing...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/repositories/import', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ url, branch })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Import failed');
+        showToast('✅ Success', 'Repository imported successfully!');
+        closeImportModal();
+        document.getElementById('importUrl').value = '';
+        await loadRepositories();
+        await loadDashboard();
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    } finally {
+        btn.textContent = 'Import';
+        btn.disabled = false;
+    }
+}
+
+// ===== GET SELECTED REPO ID =====
+function getSelectedRepo() {
+    const select = document.getElementById('migrateRepoSelect');
+    return select.value || (repositories.length > 0 ? repositories[0].id : null);
+}
+
+// ===== UPDATE PROGRESS =====
+function updateProgress(percent, label) {
+    const container = document.getElementById('progressContainer');
+    const fill = document.getElementById('progressFill');
+    const percentText = document.getElementById('progressPercent');
+    const labelText = document.getElementById('progressLabel');
+    if (container) container.classList.add('active');
+    if (fill) fill.style.width = percent + '%';
+    if (percentText) percentText.textContent = percent + '%';
+    if (labelText) labelText.textContent = label || 'Processing...';
+}
+
+// ===== ADD LOG =====
+function addLog(message, level = 'info') {
+    const container = document.getElementById('logContainer');
+    if (!container) return;
+    container.classList.add('active');
+    const time = new Date().toLocaleTimeString();
+    container.innerHTML += `<div class="log-entry">
+        <span class="log-time">${time}</span>
+        <span class="log-level ${level}">${level}</span>
+        ${message}
+    </div>`;
+    container.scrollTop = container.scrollHeight;
+}
+
+// ===== RUN FUNCTIONS =====
+async function runFullMigration(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    
+    const repoName = repositories.find(r => r.id === id)?.name || 'Unknown';
+    updateProgress(0, `🚀 Starting migration for ${repoName}...`);
+    addLog(`🚀 Starting full migration for ${repoName}`, 'info');
+    
+    try {
+        updateProgress(20, '🔍 Analyzing repository...');
+        addLog('🔍 Running Discovery Agent...', 'info');
+        const analyzeRes = await fetch(`/api/repositories/${id}/analyze`, { method: 'POST', headers: getHeaders() });
+        const analyzeData = await analyzeRes.json();
+        if (!analyzeRes.ok) throw new Error(analyzeData.detail || 'Analysis failed');
+        addLog(`✅ Framework: ${analyzeData.framework || 'Unknown'}`, 'success');
+        
+        updateProgress(40, '📋 Creating migration plan...');
+        addLog('📋 Running Planning Agent...', 'info');
+        const planRes = await fetch(`/api/repositories/${id}/plan`, { method: 'POST', headers: getHeaders() });
+        const planData = await planRes.json();
+        if (!planRes.ok) throw new Error(planData.detail || 'Planning failed');
+        addLog(`✅ Plan created with ${planData.steps?.length || 0} steps`, 'success');
+        
+        updateProgress(60, '✍️ Executing migration...');
+        addLog('✍️ Running Execution Agent...', 'info');
+        const migrateRes = await fetch(`/api/repositories/${id}/migrate`, { method: 'POST', headers: getHeaders() });
+        const migrateData = await migrateRes.json();
+        if (!migrateRes.ok) throw new Error(migrateData.detail || 'Migration failed');
+        addLog(`✅ ${migrateData.modified_files || 0} files modified`, 'success');
+        
+        updateProgress(80, '🧪 Verifying migration...');
+        addLog('🧪 Running Verification Agent...', 'info');
+        const verifyRes = await fetch(`/api/repositories/${id}/verify`, { method: 'POST', headers: getHeaders() });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) throw new Error(verifyData.detail || 'Verification failed');
+        
+        updateProgress(100, '✅ Migration complete!');
+        addLog('✅ Migration completed successfully!', 'success');
+        
+        const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+        history.push({ repo_id: id, repo_name: repoName, action: 'Full Migration', status: 'success', date: new Date().toISOString() });
+        localStorage.setItem('migration_history', JSON.stringify(history));
+        loadDashboard();
+        loadHistory();
+        showToast('🎉 Success', `Migration of ${repoName} completed!`);
+        
+    } catch (e) {
+        updateProgress(100, '❌ Migration failed');
+        addLog(`❌ Error: ${e.message}`, 'error');
+        showToast('❌ Error', e.message);
+        const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+        history.push({ repo_id: id, repo_name: repoName, action: 'Full Migration', status: 'failed', date: new Date().toISOString() });
+        localStorage.setItem('migration_history', JSON.stringify(history));
+    }
+}
+
+async function runAnalyze(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    showToast('🔍 Analyzing', 'Analyzing repository...');
+    try {
+        const res = await fetch(`/api/repositories/${id}/analyze`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+        showToast('✅ Analysis Complete', `Framework: ${data.framework || 'Unknown'}`);
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    }
+}
+
+async function runPlan(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    showToast('📋 Planning', 'Creating migration plan...');
+    try {
+        const res = await fetch(`/api/repositories/${id}/plan`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Planning failed');
+        showToast('✅ Plan Created', `${data.steps?.length || 0} steps planned`);
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    }
+}
+
+async function runMigrate(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    showToast('✍️ Migrating', 'Applying changes...');
+    try {
+        const res = await fetch(`/api/repositories/${id}/migrate`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Migration failed');
+        showToast('✅ Migration Complete', `${data.modified_files || 0} files modified`);
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    }
+}
+
+async function runVerify(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    showToast('🧪 Verifying', 'Running tests...');
+    try {
+        const res = await fetch(`/api/repositories/${id}/verify`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Verification failed');
+        showToast('✅ Verification Complete', `${data.passed || 0} tests passed`);
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    }
+}
+
+async function runReport(repoId = null) {
+    const id = repoId || getSelectedRepo();
+    if (!id) { showToast('Error', 'Please select a repository first'); return; }
+    showToast('📊 Report', 'Generating report...');
+    try {
+        const res = await fetch(`/api/repositories/${id}/report`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Report generation failed');
+        showToast('✅ Report Ready', `Files modified: ${data.summary?.files_modified || 0}`);
+    } catch (e) {
+        showToast('❌ Error', e.message);
+    }
+}
+
+// ===== LOAD HISTORY =====
+function loadHistory() {
+    const container = document.getElementById('historyList');
+    if (!container) return;
+    const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+    if (history.length === 0) {
+        container.innerHTML = `
+            <p style="color:var(--text-secondary);text-align:center;padding:40px 0;">
+                <i class="fas fa-history" style="font-size:32px;display:block;margin-bottom:12px;"></i>
+                No migration history yet.
+            </p>
+        `;
+        return;
+    }
+    container.innerHTML = `
+        <div style="background:var(--glass-bg);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:16px;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead style="background:rgba(0,0,0,0.2);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-secondary);font-weight:500;">Repository</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-secondary);font-weight:500;">Action</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-secondary);font-weight:500;">Status</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-secondary);font-weight:500;">Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${history.slice().reverse().map(h => `
+                        <tr>
+                            <td style="padding:12px 16px;border-top:1px solid var(--glass-border);">${h.repo_name || 'Unknown'}</td>
+                            <td style="padding:12px 16px;border-top:1px solid var(--glass-border);">${h.action || 'Migration'}</td>
+                            <td style="padding:12px 16px;border-top:1px solid var(--glass-border);">
+                                <span style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;background:${h.status === 'success' ? 'rgba(0,184,148,0.2)' : 'rgba(255,71,87,0.2)'};color:${h.status === 'success' ? '#00b894' : '#ff6b6b'};">
+                                    ${h.status || 'Pending'}
+                                </span>
+                            </td>
+                            <td style="padding:12px 16px;border-top:1px solid var(--glass-border);font-size:13px;color:var(--text-secondary);">${new Date(h.date).toLocaleString()}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ===== LOGOUT =====
+function logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('migration_history');
+    window.location.href = '/login';
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async function() {
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/login'; return; }
+    await loadUser();
+    await loadDashboard();
+    await loadRepositories();
+    await loadHistory();
+    setTimeout(populateRepoSelect, 500);
 });
 
-console.log('✅ dashboard.js loaded successfully!');
+// Click outside modal to close
+document.getElementById('importModal').addEventListener('click', function(e) {
+    if (e.target === this) closeImportModal();
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeImportModal();
+});
