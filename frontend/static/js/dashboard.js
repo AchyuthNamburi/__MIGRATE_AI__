@@ -146,6 +146,7 @@ function renderRepositories() {
                 <button class="btn-migrate" onclick="runFullMigration('${r.id}')"><i class="fas fa-play"></i> Migrate</button>
                 <button class="btn-analyze" onclick="runAnalyze('${r.id}')"><i class="fas fa-search"></i></button>
                 <button class="btn-analyze" onclick="runReport('${r.id}')"><i class="fas fa-file-alt"></i></button>
+                <button class="btn-download" onclick="downloadRepo('${r.id}', '${r.name}')"><i class="fas fa-download"></i> Download</button>
             </div>
         </div>
     `).join('');
@@ -411,6 +412,24 @@ function logout() {
     localStorage.removeItem('user');
     localStorage.removeItem('migration_history');
     window.location.href = '/login';
+}
+
+// ===== DOWNLOAD REPOSITORY =====
+function downloadRepo(repoId, repoName) {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        showToast('Error', 'Please login first');
+        return;
+    }
+    
+    showToast('📥 Downloading', `Starting download of ${repoName}...`);
+    
+    // Open download in new tab
+    window.open(`/api/repositories/${repoId}/download?token=${token}`, '_blank');
+    
+    setTimeout(() => {
+        showToast('✅ Success', `Download of ${repoName} started!`);
+    }, 1000);
 }
 
 // ===== INIT =====

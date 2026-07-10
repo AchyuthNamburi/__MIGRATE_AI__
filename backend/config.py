@@ -6,8 +6,6 @@ from typing import List, Optional
 import os
 
 class Settings(BaseSettings):
-    """Application settings"""
-    
     # Application
     APP_NAME: str = "AI Migration Agent"
     APP_ENV: str = "development"
@@ -40,6 +38,10 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
+    # ✅ NEW: Fallback LLM API Keys
+    GOOGLE_API_KEY: Optional[str] = None
+    MISTRAL_API_KEY: Optional[str] = None
+    
     # Celery
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
@@ -67,7 +69,6 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
     
     class Config:
-        """Pydantic config"""
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True

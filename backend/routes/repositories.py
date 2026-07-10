@@ -1,9 +1,12 @@
 # backend/routes/repositories.py
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import logging
 import os
 import uuid
+import zipfile
+import tempfile
 from datetime import datetime
 
 from backend.core.database import get_db
@@ -12,14 +15,13 @@ from backend.models.user import User
 from backend.models.repository import Repository
 from backend.services.github_service import GitHubService
 
-# ✅ FIX: Import the CORRECT class names
+# ✅ Import all agents
 from backend.agents import (
     MemorySystem,
     DiscoveryAgent,
-    PlanningAgent,      # ✅ Changed from MigrationPlanner
-    CodeMigrator,       # ✅ Changed from CodeMigrationAgent
+    PlanningAgent,
+    CodeMigrator,
     VerificationAgent,
-    RepairAgent,
     ReportAgent
 )
 
@@ -64,6 +66,42 @@ async def import_repository(
             detail=str(e)
         )
 
+@router.get("/{repo_id}/download")
+async def download_migrated_repo(
+    repo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Download the migrated repository as a ZIP file"""
+    
+    repo = db.query(Repository).filter(
+        Repository.id == uuid.UUID(repo_id),
+        Repository.user_id == current_user.id
+    ).first()
+    
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
+    
+    if not os.path.exists(clone_path):
+        raise HTTPException(status_code=404, detail="Repository not found on server")
+    
+    zip_path = tempfile.mktemp(suffix=".zip")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(clone_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, clone_path)
+                zipf.write(file_path, arcname)
+    
+    return FileResponse(
+        path=zip_path,
+        filename=f"{repo.name}_migrated.zip",
+        media_type="application/zip"
+    )
+
 @router.post("/{repo_id}/analyze")
 async def analyze_repository(
     repo_id: str,
@@ -90,7 +128,6 @@ async def analyze_repository(
                 detail="Repository not cloned. Please import first."
             )
         
-        # ✅ Use correct class names
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
         result = await discovery.discover(clone_path)
@@ -130,12 +167,11 @@ async def plan_migration(
                 detail="Repository not cloned. Please import first."
             )
         
-        # ✅ Use correct class names
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
         analysis = await discovery.discover(clone_path)
         
-        planning = PlanningAgent(memory)  # ✅ Fixed
+        planning = PlanningAgent(memory)
         plan = await planning.plan(analysis)
         
         return plan
@@ -173,7 +209,6 @@ async def migrate_repository(
                 detail="Repository not cloned. Please import first."
             )
         
-        # ✅ Use correct class names
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
         analysis = await discovery.discover(clone_path)
@@ -181,7 +216,7 @@ async def migrate_repository(
         planning = PlanningAgent(memory)
         plan = await planning.plan(analysis)
         
-        migrator = CodeMigrator(clone_path, plan)  # ✅ Fixed
+        migrator = CodeMigrator(clone_path, plan)
         result = await migrator.execute()
         
         return result
@@ -258,28 +293,63 @@ async def generate_report(
                 detail="Repository not cloned. Please import first."
             )
         
-        # ✅ Use correct class names
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
         analysis = await discovery.discover(clone_path)
-        
+
         planning = PlanningAgent(memory)
         plan = await planning.plan(analysis)
-        
+
         migrator = CodeMigrator(clone_path, plan)
         migration_result = await migrator.execute()
-        
+
         verification = VerificationAgent(memory)
         verification_result = await verification.verify(clone_path)
-        
+
         report_agent = ReportAgent(memory)
         report = await report_agent.generate_report(clone_path)
-        
+
         return report
-        
+
     except Exception as e:
         logger.error(f"Report generation error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+@router.get("/{repo_id}/download")
+async def download_migrated_repo(
+    repo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Download the migrated repository as a ZIP file"""
+    
+    repo = db.query(Repository).filter(
+        Repository.id == uuid.UUID(repo_id),
+        Repository.user_id == current_user.id
+    ).first()
+    
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
+    
+    if not os.path.exists(clone_path):
+        raise HTTPException(status_code=404, detail="Repository not found on server")
+    
+    zip_path = tempfile.mktemp(suffix=".zip")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(clone_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, clone_path)
+                zipf.write(file_path, arcname)
+    
+    return FileResponse(
+        path=zip_path,
+        filename=f"{repo.name}_migrated.zip",
+        media_type="application/zip"
+    )

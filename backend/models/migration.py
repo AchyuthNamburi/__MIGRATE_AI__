@@ -34,10 +34,11 @@ class MigrationJob(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship("User", back_populates="migrations")
-    files = relationship("MigrationFile", back_populates="migration", cascade="all, delete-orphan")
-    reviews = relationship("MigrationReview", back_populates="migration", cascade="all, delete-orphan")
-    history = relationship("MigrationHistory", back_populates="migration", cascade="all, delete-orphan")
+    # ✅ Comment out the relationship for now
+    # user = relationship("User", back_populates="migrations")
+    # files = relationship("MigrationFile", back_populates="migration", cascade="all, delete-orphan")
+    # reviews = relationship("MigrationReview", back_populates="migration", cascade="all, delete-orphan")
+    # history = relationship("MigrationHistory", back_populates="migration", cascade="all, delete-orphan")
 
 class MigrationFile(Base):
     __tablename__ = "migration_files"
@@ -56,7 +57,8 @@ class MigrationFile(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    migration = relationship("MigrationJob", back_populates="files")
+    # ✅ Comment out for now
+    # migration = relationship("MigrationJob", back_populates="files")
 
 class MigrationReview(Base):
     __tablename__ = "migration_reviews"
@@ -70,7 +72,8 @@ class MigrationReview(Base):
     comments = Column(Text)
     reviewed_at = Column(DateTime, default=datetime.utcnow)
 
-    migration = relationship("MigrationJob", back_populates="reviews")
+    # ✅ Comment out for now
+    # migration = relationship("MigrationJob", back_populates="reviews")
 
 class MigrationHistory(Base):
     __tablename__ = "migration_history"
@@ -83,4 +86,5 @@ class MigrationHistory(Base):
     details = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    migration = relationship("MigrationJob", back_populates="history")
+    # ✅ Comment out for now
+    # migration = relationship("MigrationJob", back_populates="history")

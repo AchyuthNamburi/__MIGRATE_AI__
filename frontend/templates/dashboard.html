@@ -755,6 +755,9 @@
                         <button class="btn-migrate" onclick="runFullMigration('${r.id}')"><i class="fas fa-play"></i> Migrate</button>
                         <button class="btn-analyze" onclick="runAnalyze('${r.id}')"><i class="fas fa-search"></i></button>
                         <button class="btn-analyze" onclick="runReport('${r.id}')"><i class="fas fa-file-alt"></i></button>
+                        <button class="btn-download" onclick="downloadRepo('${r.id}', '${r.name}')">
+        <i class="fas fa-download"></i> Download
+    </button>
                     </div>
                 </div>
             `).join('');
@@ -931,6 +934,7 @@
                 showToast('❌ Error', e.message);
             }
         }
+        
 
         async function runPlan(repoId = null) {
             const id = repoId || getSelectedRepo();
@@ -1047,6 +1051,19 @@
 
         function connectGitHub() {
             window.location.href = '/api/auth/github/login';
+        }
+        // ===== DOWNLOAD REPOSITORY =====
+        function downloadRepo(repoId, repoName) {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                showToast('Error', 'Please login first');
+                return;
+            }
+            showToast('📥 Downloading', `Starting download of ${repoName}...`);
+            window.open(`/api/repositories/${repoId}/download?token=${token}`, '_blank');
+            setTimeout(() => {
+                showToast('✅ Success', `Download of ${repoName} started!`);
+            }, 1000);
         }
 
         document.addEventListener('DOMContentLoaded', async function() {

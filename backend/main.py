@@ -2,9 +2,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
+
+# ✅ Import the routers
+from backend.routes import auth, repositories
 
 app = FastAPI()
 
@@ -20,10 +22,19 @@ app.add_middleware(
 # Static files
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
-# Templates
-templates = Jinja2Templates(directory="frontend/templates")
+# ✅ Register the routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(repositories.router, prefix="/api/repositories", tags=["Repositories"])
 
-# ===== ROOT — REDIRECT TO LOGIN =====
+# ===== SIMPLE HTML LOADER =====
+def load_html(filename: str) -> str:
+    try:
+        with open(f"frontend/templates/{filename}", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return f"<h1>Template not found: {filename}</h1>"
+
+# ===== ROOT =====
 @app.get("/")
 async def root():
     return RedirectResponse(url="/login")
@@ -35,22 +46,25 @@ async def health():
 
 # ===== PAGES =====
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+async def login_page():
+    return HTMLResponse(content=load_html("login.html"))
 
 @app.get("/signup", response_class=HTMLResponse)
-async def signup_page(request: Request):
-    return templates.TemplateResponse("signup.html", {"request": request})
+async def signup_page():
+    return HTMLResponse(content=load_html("signup.html"))
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+async def dashboard_page():
+    return HTMLResponse(content=load_html("dashboard.html"))
 
 # ===== STARTUP =====
 @app.on_event("startup")
 async def startup():
-    from backend.core.database import engine, Base
-    from backend.models.user import User, UserProfile
-    from backend.models.migration import MigrationJob, MigrationFile, MigrationReview, MigrationHistory
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created/verified")
+    try:
+        from backend.core.database import engine, Base
+        from backend.models.user import User, UserProfile
+        from backend.models.migration import MigrationJob, MigrationFile, MigrationReview, MigrationHistory
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database tables created/verified")
+    except Exception as e:
+        print(f"⚠️ Database startup error: {e}")
