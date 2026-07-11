@@ -80,7 +80,7 @@ class MigrationHistory(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    migration_id = Column(UUID(as_uuid=True), ForeignKey("migration_jobs.id", ondelete="CASCADE"))
+    migration_id = Column(UUID(as_uuid=True), ForeignKey("migration_jobs.id", ondelete="CASCADE"), nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     action = Column(String(100))
     details = Column(JSON)

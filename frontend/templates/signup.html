@@ -122,7 +122,19 @@
                     body: JSON.stringify({ full_name: fullName, username, email, password })
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Signup failed');
+                if (!response.ok) {
+                    let errorMsg = 'Signup failed';
+                    if (data.detail) {
+                        if (Array.isArray(data.detail)) {
+                            errorMsg = data.detail.map(err => err.msg).join(', ');
+                        } else if (typeof data.detail === 'string') {
+                            errorMsg = data.detail;
+                        } else {
+                            errorMsg = JSON.stringify(data.detail);
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
 
                 successEl.textContent = 'Account created! Redirecting to login...';
                 successEl.style.display = 'block';

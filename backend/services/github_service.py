@@ -15,7 +15,7 @@ class GitHubService:
         self.repo_path = "/tmp/migration_agent/repos"
         os.makedirs(self.repo_path, exist_ok=True)
     
-    async def import_repository(self, user_id: str, repo_url: str, branch: str = "main") -> Dict:
+    async def import_repository(self, user_id: str, repo_url: str, branch: str = None) -> Dict:
         try:
             full_name = repo_url.replace("https://github.com/", "").replace(".git", "")
             repo_name = full_name.split("/")[-1]
@@ -31,7 +31,19 @@ class GitHubService:
             if os.path.exists(clone_path):
                 shutil.rmtree(clone_path)
             
-            git.Repo.clone_from(repo_url, clone_path, branch=branch)
+            if branch:
+                try:
+                    git.Repo.clone_from(repo_url, clone_path, branch=branch)
+                except git.exc.GitCommandError as e:
+                    if "Remote branch" in str(e) and "not found" in str(e):
+                        logger.warning(f"Branch '{branch}' not found, falling back to default branch.")
+                        if os.path.exists(clone_path):
+                            shutil.rmtree(clone_path)
+                        git.Repo.clone_from(repo_url, clone_path)
+                    else:
+                        raise
+            else:
+                git.Repo.clone_from(repo_url, clone_path)
             
             github_id = int(hashlib.md5(full_name.encode()).hexdigest()[:8], 16)
             

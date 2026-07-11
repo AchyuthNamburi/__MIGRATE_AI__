@@ -13,7 +13,16 @@ from backend.core.database import get_db
 from backend.middleware.auth_middleware import get_current_user
 from backend.models.user import User
 from backend.models.repository import Repository
+from backend.models.migration import MigrationHistory
 from backend.services.github_service import GitHubService
+from pydantic import BaseModel
+
+class HistoryEvent(BaseModel):
+    repo_id: str
+    repo_name: str
+    action: str
+    status: str
+
 
 # ✅ Import all agents
 from backend.agents import (
@@ -24,6 +33,7 @@ from backend.agents import (
     VerificationAgent,
     ReportAgent
 )
+from backend.core.security import security
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +66,7 @@ async def import_repository(
         result = await service.import_repository(
             user_id=str(current_user.id),
             repo_url=data.get("url"),
-            branch=data.get("branch", "main")
+            branch=data.get("branch")
         )
         return result
     except Exception as e:
@@ -69,20 +79,26 @@ async def import_repository(
 @router.get("/{repo_id}/download")
 async def download_migrated_repo(
     repo_id: str,
-    current_user: User = Depends(get_current_user),
+    token: str,
     db: Session = Depends(get_db)
 ):
     """Download the migrated repository as a ZIP file"""
     
+    try:
+        payload = security.verify_token(token)
+        user_id = payload.get("sub")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
     repo = db.query(Repository).filter(
         Repository.id == uuid.UUID(repo_id),
-        Repository.user_id == current_user.id
+        Repository.user_id == uuid.UUID(user_id)
     ).first()
     
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     
-    clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
+    clone_path = f"/tmp/migration_agent/repos/{user_id}/{repo.name}"
     
     if not os.path.exists(clone_path):
         raise HTTPException(status_code=404, detail="Repository not found on server")
@@ -318,38 +334,43 @@ async def generate_report(
             detail=str(e)
         )
 
-@router.get("/{repo_id}/download")
-async def download_migrated_repo(
-    repo_id: str,
+@router.get("/history/list")
+async def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Download the migrated repository as a ZIP file"""
+    history_records = db.query(MigrationHistory).filter(
+        MigrationHistory.user_id == current_user.id
+    ).order_by(MigrationHistory.created_at.desc()).all()
     
-    repo = db.query(Repository).filter(
-        Repository.id == uuid.UUID(repo_id),
-        Repository.user_id == current_user.id
-    ).first()
-    
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    
-    clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
-    
-    if not os.path.exists(clone_path):
-        raise HTTPException(status_code=404, detail="Repository not found on server")
-    
-    zip_path = tempfile.mktemp(suffix=".zip")
-    
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(clone_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, clone_path)
-                zipf.write(file_path, arcname)
-    
-    return FileResponse(
-        path=zip_path,
-        filename=f"{repo.name}_migrated.zip",
-        media_type="application/zip"
+    # Format for frontend
+    result = []
+    for h in history_records:
+        result.append({
+            "repo_id": h.details.get("repo_id"),
+            "repo_name": h.details.get("repo_name"),
+            "action": h.action,
+            "status": h.details.get("status"),
+            "date": h.created_at.isoformat()
+        })
+    return result
+
+@router.post("/history/add")
+async def add_history(
+    event: HistoryEvent,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    new_history = MigrationHistory(
+        user_id=current_user.id,
+        action=event.action,
+        details={
+            "repo_id": event.repo_id,
+            "repo_name": event.repo_name,
+            "status": event.status
+        }
     )
+    db.add(new_history)
+    db.commit()
+    return {"status": "success"}
+

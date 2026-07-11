@@ -77,48 +77,63 @@ class FallbackLLM:
         return "Code transformation applied (fallback mode)"
 
 
+class ReliableLLM:
+    """Wrapper that tries multiple LLMs sequentially until one succeeds"""
+    def __init__(self, llms):
+        self.llms = llms
+        self.fallback = FallbackLLM()
+        
+    def invoke(self, prompt: str):
+        last_error = None
+        for llm in self.llms:
+            try:
+                logger.info(f"🚀 Invoking {llm.__class__.__name__}...")
+                return llm.invoke(prompt)
+            except Exception as e:
+                logger.warning(f"⚠️ {llm.__class__.__name__} failed: {str(e)[:200]}")
+                last_error = e
+                
+        logger.error(f"❌ All remote LLMs failed. Using FallbackLLM. Last error: {last_error}")
+        return self.fallback.invoke(prompt)
+
 def get_llm():
     """Get LLM with fallback providers"""
+    llms_to_try = []
 
     # ===== Primary: Groq =====
     if settings.GROQ_API_KEY:
         try:
-            logger.info("🟢 Using Groq as primary LLM")
-            return ChatGroq(
+            llms_to_try.append(ChatGroq(
                 api_key=settings.GROQ_API_KEY,
                 model="llama-3.1-8b-instant",
                 temperature=0.1,
                 max_tokens=2048
-            )
+            ))
         except Exception as e:
-            logger.warning(f"Groq failed: {e}")
+            logger.warning(f"Groq setup failed: {e}")
 
     # ===== Fallback 1: Google Gemini =====
     if settings.GOOGLE_API_KEY and ChatGoogleGenerativeAI:
         try:
-            logger.info("🟡 Falling back to Google Gemini")
-            return ChatGoogleGenerativeAI(
+            llms_to_try.append(ChatGoogleGenerativeAI(
                 api_key=settings.GOOGLE_API_KEY,
                 model="gemini-2.5-flash",
                 temperature=0.1,
                 max_tokens=2048
-            )
+            ))
         except Exception as e:
-            logger.warning(f"Google Gemini failed: {e}")
+            logger.warning(f"Google Gemini setup failed: {e}")
 
     # ===== Fallback 2: Mistral =====
     if settings.MISTRAL_API_KEY and ChatMistralAI:
         try:
-            logger.info("🟡 Falling back to Mistral")
-            return ChatMistralAI(
+            llms_to_try.append(ChatMistralAI(
                 api_key=settings.MISTRAL_API_KEY,
                 model="mistral-small-3.1",
                 temperature=0.1,
                 max_tokens=2048
-            )
+            ))
         except Exception as e:
-            logger.warning(f"Mistral failed: {e}")
+            logger.warning(f"Mistral setup failed: {e}")
 
-    # ===== Fallback 3: Rule-based LLM (Always Works) =====
-    logger.warning("🟠 Using fallback rule-based LLM")
-    return FallbackLLM()
+    return ReliableLLM(llms_to_try)

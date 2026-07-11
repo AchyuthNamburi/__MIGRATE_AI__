@@ -174,7 +174,7 @@ function closeImportModal() {
 // ===== IMPORT REPOSITORY =====
 async function importRepository() {
     const url = document.getElementById('importUrl').value.trim();
-    const branch = document.getElementById('importBranch').value.trim() || 'main';
+    const branch = document.getElementById('importBranch').value.trim();
     if (!url) { showToast('Error', 'Please enter a GitHub URL'); return; }
     
     const btn = event.target;

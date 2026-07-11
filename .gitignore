@@ -46,7 +46,6 @@ logs/
 reports/
 *.pdf
 *.html
-*.md
 tmp/
 temp/
 *.tmp
