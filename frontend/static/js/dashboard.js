@@ -240,49 +240,57 @@ async function runFullMigration(repoId = null) {
     if (!id) { showToast('Error', 'Please select a repository first'); return; }
     
     const repoName = repositories.find(r => r.id === id)?.name || 'Unknown';
-    updateProgress(0, `🚀 Starting migration for ${repoName}...`);
+    updateProgress(10, `🚀 Starting background migration for ${repoName}...`);
     addLog(`🚀 Starting full migration for ${repoName}`, 'info');
     
     try {
-        updateProgress(20, '🔍 Analyzing repository...');
-        addLog('🔍 Running Discovery Agent...', 'info');
-        const analyzeRes = await fetch(`/api/repositories/${id}/analyze`, { method: 'POST', headers: getHeaders() });
-        const analyzeData = await analyzeRes.json();
-        if (!analyzeRes.ok) throw new Error(analyzeData.detail || 'Analysis failed');
-        addLog(`✅ Framework: ${analyzeData.framework || 'Unknown'}`, 'success');
+        const res = await fetch(`/api/repositories/${id}/full-migrate`, { method: 'POST', headers: getHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to start migration');
         
-        updateProgress(40, '📋 Creating migration plan...');
-        addLog('📋 Running Planning Agent...', 'info');
-        const planRes = await fetch(`/api/repositories/${id}/plan`, { method: 'POST', headers: getHeaders() });
-        const planData = await planRes.json();
-        if (!planRes.ok) throw new Error(planData.detail || 'Planning failed');
-        addLog(`✅ Plan created with ${planData.steps?.length || 0} steps`, 'success');
+        const taskId = data.task_id;
+        addLog(`✅ Task queued. ID: ${taskId}`, 'success');
         
-        updateProgress(60, '✍️ Executing migration...');
-        addLog('✍️ Running Execution Agent...', 'info');
-        const migrateRes = await fetch(`/api/repositories/${id}/migrate`, { method: 'POST', headers: getHeaders() });
-        const migrateData = await migrateRes.json();
-        if (!migrateRes.ok) throw new Error(migrateData.detail || 'Migration failed');
-        addLog(`✅ ${migrateData.modified_files || 0} files modified`, 'success');
+        if (pollInterval) clearInterval(pollInterval);
         
-        updateProgress(80, '🧪 Verifying migration...');
-        addLog('🧪 Running Verification Agent...', 'info');
-        const verifyRes = await fetch(`/api/repositories/${id}/verify`, { method: 'POST', headers: getHeaders() });
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok) throw new Error(verifyData.detail || 'Verification failed');
-        
-        updateProgress(100, '✅ Migration complete!');
-        addLog('✅ Migration completed successfully!', 'success');
-        
-        const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
-        history.push({ repo_id: id, repo_name: repoName, action: 'Full Migration', status: 'success', date: new Date().toISOString() });
-        localStorage.setItem('migration_history', JSON.stringify(history));
-        loadDashboard();
-        loadHistory();
-        showToast('🎉 Success', `Migration of ${repoName} completed!`);
+        pollInterval = setInterval(async () => {
+            try {
+                const statusRes = await fetch(`/api/repositories/task-status/${taskId}`, { headers: getHeaders() });
+                const statusData = await statusRes.json();
+                
+                if (statusData.status === 'PROGRESS') {
+                    updateProgress(statusData.progress || 50, statusData.message || 'Processing...');
+                    if (statusData.message && !document.getElementById('logContainer').innerHTML.includes(statusData.message)) {
+                        addLog(`🔄 ${statusData.message}`, 'info');
+                    }
+                } else if (statusData.status === 'SUCCESS') {
+                    clearInterval(pollInterval);
+                    updateProgress(100, '✅ Migration complete!');
+                    addLog('✅ Migration completed successfully!', 'success');
+                    
+                    const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+                    history.push({ repo_id: id, repo_name: repoName, action: 'Full Migration', status: 'success', date: new Date().toISOString() });
+                    localStorage.setItem('migration_history', JSON.stringify(history));
+                    loadDashboard();
+                    loadHistory();
+                    showToast('🎉 Success', `Migration of ${repoName} completed!`);
+                } else if (statusData.status === 'FAILURE') {
+                    clearInterval(pollInterval);
+                    throw new Error(statusData.error || 'Task failed internally');
+                }
+            } catch (pollErr) {
+                clearInterval(pollInterval);
+                updateProgress(100, '❌ Migration failed');
+                addLog(`❌ Error: ${pollErr.message}`, 'error');
+                showToast('❌ Error', pollErr.message);
+                const history = JSON.parse(localStorage.getItem('migration_history') || '[]');
+                history.push({ repo_id: id, repo_name: repoName, action: 'Full Migration', status: 'failed', date: new Date().toISOString() });
+                localStorage.setItem('migration_history', JSON.stringify(history));
+            }
+        }, 3000);
         
     } catch (e) {
-        updateProgress(100, '❌ Migration failed');
+        updateProgress(100, '❌ Migration failed to start');
         addLog(`❌ Error: ${e.message}`, 'error');
         showToast('❌ Error', e.message);
         const history = JSON.parse(localStorage.getItem('migration_history') || '[]');

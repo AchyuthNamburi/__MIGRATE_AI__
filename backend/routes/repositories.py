@@ -16,6 +16,7 @@ from backend.models.repository import Repository
 from backend.models.migration import MigrationHistory
 from backend.services.github_service import GitHubService
 from pydantic import BaseModel
+from backend.workers.celery_app import run_migration, app as celery_app
 
 class HistoryEvent(BaseModel):
     repo_id: str
@@ -117,6 +118,46 @@ async def download_migrated_repo(
         filename=f"{repo.name}_migrated.zip",
         media_type="application/zip"
     )
+
+@router.post("/{repo_id}/full-migrate")
+async def start_full_migration(
+    repo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        repo = db.query(Repository).filter(
+            Repository.id == uuid.UUID(repo_id),
+            Repository.user_id == current_user.id
+        ).first()
+        if not repo:
+            raise HTTPException(status_code=404, detail="Repository not found")
+            
+        clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
+        if not os.path.exists(clone_path):
+            raise HTTPException(status_code=400, detail="Repository not cloned. Please import first.")
+            
+        # Dispatch to celery!
+        task = run_migration.delay(repo_id=str(repo_id), clone_path=clone_path)
+        return {"task_id": task.id, "status": "PENDING"}
+    except Exception as e:
+        logger.error(f"Failed to start migration task: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/task-status/{task_id}")
+async def get_task_status(task_id: str):
+    task_result = celery_app.AsyncResult(task_id)
+    response = {
+        "task_id": task_id,
+        "status": task_result.status,
+    }
+    if task_result.state == 'PROGRESS':
+        response.update(task_result.info)
+    elif task_result.state == 'SUCCESS':
+        response["result"] = task_result.result
+    elif task_result.state == 'FAILURE':
+        response["error"] = str(task_result.info)
+    return response
 
 @router.post("/{repo_id}/analyze")
 async def analyze_repository(

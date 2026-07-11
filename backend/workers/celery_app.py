@@ -32,31 +32,45 @@ app.conf.update(
     }
 )
 
-# backend/workers/tasks.py
-from celery import Task
-from backend.agents.migration_orchestrator import MigrationOrchestrator
 import asyncio
+from backend.agents.memory_system import MemorySystem
+from backend.agents.discovery_agent import DiscoveryAgent
+from backend.agents.planning_agent import PlanningAgent
+from backend.agents.migration_agent import CodeMigrator
+from backend.agents.verification_agent import VerificationAgent
 
-class MigrationTask(Task):
-    def on_failure(self, exc, task_id, args, kwargs, einfo):
-        # Handle failure
-        pass
+async def async_run_migration(self, repo_id: str, clone_path: str):
+    memory = MemorySystem(repo_id)
     
-    def on_success(self, retval, task_id, args, kwargs):
-        # Handle success
-        pass
+    self.update_state(state='PROGRESS', meta={'step': 'discovery', 'progress': 20, 'message': 'Analyzing repository...'})
+    discovery = DiscoveryAgent(memory)
+    analysis = await discovery.discover(clone_path)
+    
+    self.update_state(state='PROGRESS', meta={'step': 'planning', 'progress': 40, 'message': 'Creating migration plan...', 'framework': analysis.get('framework', 'Unknown')})
+    planning = PlanningAgent(memory)
+    plan = await planning.plan(analysis)
+    
+    self.update_state(state='PROGRESS', meta={'step': 'migrating', 'progress': 60, 'message': 'Executing migration...'})
+    migrator = CodeMigrator(clone_path, plan)
+    migrate_result = await migrator.execute()
+    
+    self.update_state(state='PROGRESS', meta={'step': 'verifying', 'progress': 80, 'message': 'Verifying migration...'})
+    verifier = VerificationAgent(memory)
+    verify_result = await verifier.verify(clone_path)
+    
+    return {
+        "status": "success",
+        "framework": analysis.get('framework', 'Unknown'),
+        "steps_planned": len(plan.get('steps', [])),
+        "files_modified": migrate_result.get('modified_files', 0),
+        "tests_passed": verify_result.get('passed', 0)
+    }
 
-@app.task(base=MigrationTask, bind=True)
-async def run_migration(self, job_id: str):
-    """Run migration job"""
+@app.task(bind=True)
+def run_migration(self, repo_id: str, clone_path: str):
+    """Run migration job fully inside celery"""
     try:
-        orchestrator = MigrationOrchestrator()
-        result = await orchestrator.run_migration(job_id)
-        
-        # Update job status
-        await update_job_status(job_id, "completed", result)
-        
-        return result
+        return asyncio.run(async_run_migration(self, repo_id, clone_path))
     except Exception as e:
-        # Retry with exponential backoff
-        self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+        self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
+        raise e
