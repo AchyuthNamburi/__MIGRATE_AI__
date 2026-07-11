@@ -135,7 +135,14 @@ async def start_full_migration(
             
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         if not os.path.exists(clone_path):
-            raise HTTPException(status_code=400, detail="Repository not cloned. Please import first.")
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository. Is it private?")
             
         # Dispatch to celery!
         task = run_migration.delay(repo_id=str(repo_id), clone_path=clone_path)
@@ -180,10 +187,14 @@ async def analyze_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Repository not cloned. Please import first."
-            )
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository from GitHub.")
         
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
@@ -219,10 +230,14 @@ async def plan_migration(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Repository not cloned. Please import first."
-            )
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository from GitHub.")
         
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
@@ -261,10 +276,14 @@ async def migrate_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Repository not cloned. Please import first."
-            )
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository from GitHub.")
         
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
@@ -306,10 +325,14 @@ async def verify_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Repository not cloned. Please import first."
-            )
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository from GitHub.")
         
         memory = MemorySystem(str(repo_id))
         verification = VerificationAgent(memory)
@@ -345,10 +368,14 @@ async def generate_report(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Repository not cloned. Please import first."
-            )
+            import git
+            import os
+            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+            try:
+                git.Repo.clone_from(repo.clone_url, clone_path)
+            except Exception as e:
+                logger.error(f"Auto-clone failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to clone repository from GitHub.")
         
         memory = MemorySystem(str(repo_id))
         discovery = DiscoveryAgent(memory)
