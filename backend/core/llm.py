@@ -117,7 +117,7 @@ def get_llm():
         try:
             llms_to_try.append(ChatGoogleGenerativeAI(
                 api_key=settings.GOOGLE_API_KEY,
-                model="gemini-2.5-flash",
+                model="gemini-1.5-flash",
                 temperature=0.1,
                 max_tokens=2048
             ))

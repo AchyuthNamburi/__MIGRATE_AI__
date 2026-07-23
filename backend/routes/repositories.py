@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import logging
 import os
+import git
 import uuid
 import zipfile
 import tempfile
@@ -135,8 +136,6 @@ async def start_full_migration(
             
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
@@ -187,8 +186,6 @@ async def analyze_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
@@ -230,8 +227,6 @@ async def plan_migration(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
@@ -276,8 +271,6 @@ async def migrate_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
@@ -325,8 +318,6 @@ async def verify_repository(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
@@ -368,8 +359,6 @@ async def generate_report(
         clone_path = f"/tmp/migration_agent/repos/{current_user.id}/{repo.name}"
         
         if not os.path.exists(clone_path):
-            import git
-            import os
             os.makedirs(os.path.dirname(clone_path), exist_ok=True)
             try:
                 git.Repo.clone_from(repo.clone_url, clone_path)
